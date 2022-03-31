@@ -25,8 +25,7 @@
 
 byte CS = 10;               // Global variable for CS pin (default 10)
 
-void SetMode(byte CSpin, char Mode){  // Select single or mult byte transfer
-  CS=CSpin; // set global variable CS to user-defined CS pin
+void SetMode(char Mode){  // Select single or mult byte transfer
   pinMode(CS, OUTPUT);                // set CS pin to output mode
   digitalWrite(CS, LOW);              // set SPI slave select LOW
   SPI.transfer(WRMR);                 // command to write to mode register
@@ -35,7 +34,7 @@ void SetMode(byte CSpin, char Mode){  // Select single or mult byte transfer
 }
 
 void WriteFloat(uint32_t address, float data){
-  SetMode(CS,Sequential);             // set to tx/rx multiple bytes of data
+  SetMode(Sequential);             // set to tx/rx multiple bytes of data
   byte *temp=(byte *)&data;           // split float into 4 bytes
   digitalWrite(CS, LOW);              // start new command sequence
   SPI.transfer(WRITE);                // send WRITE command
@@ -47,7 +46,7 @@ void WriteFloat(uint32_t address, float data){
 }
 
 float ReadFloat(uint32_t address){
-  SetMode(CS,Sequential);             // set to tx/rx multiple bytes of data
+  SetMode(Sequential);             // set to tx/rx multiple bytes of data
   byte temp[4];                       // temp array of bytes with 4 elements
   float data=0;
   digitalWrite(CS, LOW);              // start new command sequence
@@ -104,10 +103,10 @@ float sComplexMag(const struct sComplex* a) {
 
 // Number of times to read from pin before computing fft.
 // TODO: reduce this number to something that corresponds to 0.1 second ish?
-#define k_num_reads 8192
+#define k_num_reads 128
 // TODO: is this number sufficient for "literal" fine tuning?
 //   Larger dft means longer compute time.
-#define k_dft_N 1024
+#define k_dft_N 128
 
 // Size of a memory block, 4 bytes per float entry.
 #define k_mem_block_size_reads k_num_reads*4
@@ -133,11 +132,8 @@ void Test23LC1024() {
 
   if (test_float - readval < 0.001) {
     board_alive = 1;
+    Serial.println("Board confirmed.");
   }
-
-  Serial.print("got ");
-  Serial.print(readval);
-  Serial.print("\n");
 }
 
 void setup()
@@ -175,6 +171,8 @@ void loop()
     return;
   }
 
+  Serial.println("running FFT.");
+
   i_read = 0; // Reset this value back to 0 for next run.
   interval = millis() - interval;
 
@@ -206,6 +204,10 @@ void loop()
   }
   // DFT
 
+  Serial.println("DFT complete.");
+
+  float fs = 0;
+
   // Compute 10*Log_10 (magnitude) of FFT bins.
   for (int i = 0; i < k_dft_N; i++) {
     sComplex s;
@@ -220,14 +222,22 @@ void loop()
     WriteFloat(addr, mag);
 
     // Compute freq axis values.
-    float fs = k_num_reads / (((float)interval)/1000); // samples per second
+    fs = k_num_reads / (((float)interval)/1000); // samples per second
     float f = i * fs / k_dft_N;
     addr = k_addr_dft_freqs + i*4;
     WriteFloat(addr, f);
 
     // DEBUG: Write data on serial line.
+    Serial.print(f);
+    Serial.print(" ");
     Serial.print(mag);
+    Serial.print("\n");
   }
+
+  Serial.print("fs = ");
+  Serial.print(fs);
+  Serial.println("");
+  Serial.println("Mag complete.");
 
   // TODO: Decide things for which freq is present.
   
